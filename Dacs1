@@ -1,0 +1,113 @@
+package  com . clínica . api . api . controlador ;
+
+import  java . útil . Lista ;
+import  java . útil . Opcional ;
+
+import  org . springframework . feijão . BeanUtils ;
+import  org . springframework . feijão . fábrica . anotação . Autowired ;
+import  org . springframework . http . HttpStatus ;
+import  org . springframework . http . ResponseEntidade ;
+import  org . springframework . web . vincular . anotação . Excluir Mapeamento ;
+import  org . springframework . web . vincular . anotação . GetMapping ;
+import  org . springframework . web . vincular . anotação . PathVariable ;
+import  org . springframework . web . vincular . anotação . Pós-Mapeamento ;
+import  org . springframework . web . vincular . anotação . PutMapping ;
+import  org . springframework . web . vincular . anotação . RequestBody ;
+import  org . springframework . web . vincular . anotação . Mapeamento de Solicitação ;
+import  org . springframework . web . vincular . anotação . Status de Resposta ;
+import  org . springframework . web . vincular . anotação . RestController ;
+
+import  com . clínica . api . domínio . exceção . RecursoEmUsoException ;
+import  com . clínica . api . domínio . exceção . Recurso Nao ExecuçãoExceção ;
+import  com . clínica . api . domínio . modelo . Médico ;
+import  com . clínica . api . domínio . repositório . IMedicoRepository ;
+import  com . clínica . api . domínio . serviço . Serviço Médico ;
+
+@ RestController
+@ RequestMapping ( value = "/medicos" )
+public  class  MedicoController {
+
+	@ Autowired
+	private  IMedicoRepository  iMedicoRepository ;
+
+	@ Autowired
+	privado  MedicoService  medicoService ;
+
+	@ GetMapping
+	public  Lista < Médico > listar () {
+		retorne  iMedicoRepository . encontrarTodos ();
+	}
+
+	@ GetMapping ( "/{medicoId}" )
+	public  ResponseEntity < Medico > buscar ( @ PathVariable  Long  medicoId ) {
+		Opcional < Medico > medico = iMedicoRepository . findById ( medicoId );
+		// Verifica se estar presente se sim retorna alguma coisa um médico cadastrado
+		if ( médico . isPresent ()) {
+			retorne  ResponseEntity . ok ( médico . obter ());
+		}
+
+		retorne  ResponseEntity . notFound (). construir ();
+	}
+	/*
+	 * Busca por nome específico ou letra que contém dentro do nome.
+	 *
+	 * @RequestParam buscar por parâmetros de consulta
+	 */
+// @GetMapping("/busca-por-nome")
+// public List<Medico> cozinhasPorNome(@RequestParam("nome") String nome) {
+// return iMedicoRepository.buscarPorNome(nome);
+// }
+//	
+	/*
+	 * faz uma busca pelo nome exato passado no parametro
+	 */
+
+	@ GetMapping ( "/por-nome-exato" )
+	public  List < Medico > medicosPorNome ( String  nome ) {
+		retorne  iMedicoRepository . findTodosMedicosByNome ( nome );
+	}
+
+	/*
+	 * faz uma busca pelo nome ou letra passado no parâmetro ou tracho de frase
+	 * retorna a consulta com todos os nomes do médico pesquisado com a letra a por exemplo
+	 * no carteiro podemos fazer um GET assim: http://localhost:8080/medicos/por-nome-letra?nome=A
+	 */
+    @ GetMapping ( "/por-nome-letra" )
+	public  List < Medico > buscarQualquerNomeLetra ( String  nome ) {
+		retorne  iMedicoRepository . findTodosMedicosByNomeContaining ( nome );
+	}
+	
+	@ PostMapping ( "/salvar" )
+	@ ResponseStatus ( HttpStatus . CREATED )
+	public  Medico  adicionar ( @ RequestBody  Medico  medico ) {
+		retorno  médicoService . salvar ( médico );
+	}
+
+	@ PutMapping ( "/{medicoId}" )
+	public  ResponseEntity < Medico > atualizado ( @ PathVariable  Long  medicoId , @ RequestBody  Medico  medico ) {
+		Opcional < Medico > medicoAtual = iMedicoRepository . findById ( medicoId );
+
+		if ( médicoAtual . isPresent ()) {
+			BeanUtils . copyProperties ( medico , medicoAtual . get (), "id" );
+
+			Medico  medicoSalvo = medicoService . salvar ( médicoAtual . get ());
+			retorne  ResponseEntity . ok ( médicoSalvo );
+		}
+
+		retorne  ResponseEntity . notFound (). construir ();
+	}
+
+	@ DeleteMapping ( "/{medicoId}" )
+	public  ResponseEntity <?> removedor ( @ PathVariable  Long  medicoId ) {
+		tente {
+			serviço médico . excluir ( medicoId );
+			retorne  ResponseEntity . sem conteúdo (). construir ();
+
+		} catch ( RecursoNao ObservaçãoExceção  e ) {
+			retorne  ResponseEntity . notFound (). construir ();
+
+		} catch ( RecursoEmUsoException  e ) {
+			retorne  ResponseEntity . status ( HttpStatus . CONFLITO ). corpo ( e . getMessage ());
+		}
+	}
+}
