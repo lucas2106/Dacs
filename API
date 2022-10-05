@@ -1,0 +1,216 @@
+package br.univille.apidacs2022.api;
+
+import java.util.List;
+
+import javax.websocket.server.PathParam;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import br.univille.apidacs2022.service.PacienteService;
+import br.univille.coredacs2022.entity.Paciente;
+import br.univille.coredacs2022.repository.PacienteRepository;
+
+@RestController
+@RequestMapping("/api/v1/pacientes")
+public class PacienteControllerAPI {
+    
+    @Autowired
+    private PacienteService service;
+
+    @GetMapping
+    public ResponseEntity<List<Paciente>> getAll(){
+        var listaPacientes = service.getAll();
+        return new 
+            ResponseEntity<List<Paciente>>
+                (listaPacientes,HttpStatus.OK);
+    }
+    @GetMapping("/{id}")
+    public ResponseEntity<Paciente> 
+            getById(@PathVariable("id") long id){
+        
+        var paciente = service.findById(id);
+        return new ResponseEntity<Paciente>
+                (paciente,HttpStatus.OK);
+    }
+
+    @PostMapping
+    public ResponseEntity<Paciente> 
+        insertPaciente(@RequestBody Paciente paciente){
+        if(paciente.getId() == 0){
+            service.save(paciente);
+            return new ResponseEntity<Paciente>(paciente,HttpStatus.CREATED);
+        }
+        return ResponseEntity.badRequest().build();
+    }
+
+    @GetMapping("/nome/{nome}")
+    public ResponseEntity<List<Paciente>> 
+                    getByNome(@PathVariable("nome") String nome){
+        var listaPacientes = service.getByName(nome);
+        return new 
+            ResponseEntity<List<Paciente>>
+                (listaPacientes,HttpStatus.OK);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Paciente>
+            update(@PathVariable("id") long id, 
+                   @RequestBody Paciente paciente){
+        
+        var pacienteAntigo = service.findById(id);
+        if(pacienteAntigo == null){
+            return ResponseEntity.notFound().build();
+        }
+
+        pacienteAntigo.setNome(paciente.getNome());
+        pacienteAntigo.setSexo(paciente.getSexo());
+        pacienteAntigo.setDataNascimento(paciente.getDataNascimento());
+        pacienteAntigo.setCidade(paciente.getCidade());
+        pacienteAntigo.setListaPlanos(paciente.getListaPlanos());
+
+        service.save(pacienteAntigo);
+
+        return new ResponseEntity<Paciente>(pacienteAntigo,HttpStatus.OK);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Paciente>
+            delete(@PathVariable("id") long id){
+        
+        var pacienteAntigo = service.findById(id);
+        if(pacienteAntigo == null){
+            return ResponseEntity.notFound().build();
+        }
+        service.delete(pacienteAntigo.getId());
+
+        return new ResponseEntity<Paciente>(pacienteAntigo,HttpStatus.OK);
+    }
+    
+}
+
+package br.univille.apidacs2022.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import springfox.documentation.builders.ApiInfoBuilder;
+import springfox.documentation.builders.PathSelectors;
+import springfox.documentation.builders.RequestHandlerSelectors;
+import springfox.documentation.service.ApiInfo;
+import springfox.documentation.spi.DocumentationType;
+import springfox.documentation.spring.web.plugins.Docket;
+import springfox.documentation.swagger2.annotations.EnableSwagger2;
+
+@Configuration
+@EnableSwagger2
+public class SwaggerConfig {
+    public ApiInfo apiInfo(){
+        return new ApiInfoBuilder()
+        .title("REST API DACS")
+        .description("Exemplo de documentação da API")
+        .termsOfServiceUrl("")
+        .license("Apache License Version 2.0")
+        .licenseUrl("https://www.apache.org/linceses/LICENSE-2.0")
+        .version("1")
+        .build();
+    }
+    @Bean
+    public Docket api2(){
+        return new Docket(DocumentationType.SWAGGER_2)
+        .select()
+        .apis(RequestHandlerSelectors.basePackage("br.univille.apidacs2022.api"))
+        .paths(PathSelectors.any())
+        .build()
+        .apiInfo(apiInfo());
+    }
+}
+
+package br.univille.apidacs2022.security;
+
+import java.io.IOException;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import br.univille.apidacs2022.service.impl.UsuarioServiceImpl;
+
+@Component
+public class JWTRequestFilter extends OncePerRequestFilter{
+
+    @Autowired
+    private JWTUtil serviceJWT;
+    @Autowired
+    private UserDetailsService userService;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, 
+            HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        
+        String authorizationHeader = 
+            request.getHeader("Authorization");
+        String username = null;
+        String token = null;
+
+        if(authorizationHeader != null &&
+        authorizationHeader.startsWith("Bearer ")){
+            token = authorizationHeader.substring(7);
+            username = serviceJWT.extractUserName(token);
+        }
+
+        if(username != null &&
+            SecurityContextHolder.getContext().getAuthentication()
+            == null){
+            UserDetails userDetails = 
+                userService.loadUserByUsername(username);
+            if(serviceJWT.validateToken(token, userDetails)){
+                UsernamePasswordAuthenticationToken ut = 
+                    new UsernamePasswordAuthenticationToken(userDetails, 
+                    null,userDetails.getAuthorities());
+
+                    ut.setDetails(new 
+                        WebAuthenticationDetailsSource()
+                        .buildDetails(request));
+                    SecurityContextHolder.getContext()
+                        .setAuthentication(ut);
+            }
+        }
+        filterChain.doFilter(request, response);
+    }
+    
+}
+
+package br.univille.apidacs2022.service;
+
+import java.util.List;
+import br.univille.coredacs2022.entity.Paciente;
+
+public interface PacienteService {
+    public List<Paciente> getAll();
+    public Paciente save(Paciente paciente);
+    public Paciente findById(long id);
+    public Paciente delete(long id);
+    public List<Paciente> getByName(String nome);
+}
